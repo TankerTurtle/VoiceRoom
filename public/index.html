@@ -1,17 +1,82 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>VoiceRoom</title>
-    <link rel="stylesheet" href="/style.css">
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8">
+<title>VoiceRoom</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#000000">
+<style>
+* { box-sizing:border-box; }
+html,body { margin:0; background:transparent; color:#fff; font:14px/1.3 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; }
+body { padding:6px; --alpha:.55; }
+#bar { display:inline-flex; align-items:center; gap:6px; padding:4px 8px; background:rgba(0,0,0,var(--alpha)); border-radius:10px; }
+#title { font-weight:600; font-size:13px; }
+#bar button { width:30px; height:30px; padding:0; color:#fff; font-size:16px; background:rgba(255,255,255,.12); border:0; border-radius:8px; cursor:pointer; touch-action:manipulation; }
+.dot { width:9px; height:9px; border-radius:50%; background:#888; }
+.dot.on { background:#3ddc84; } .dot.off { background:#d9453a; }
+#list { margin-top:6px; display:flex; flex-direction:column; gap:4px; align-items:flex-start; }
+.m { display:flex; align-items:center; gap:7px; padding:3px 10px 3px 4px; background:rgba(0,0,0,var(--alpha)); border-radius:18px; transition:opacity .2s; }
+.m img { width:26px; height:26px; border-radius:50%; border:2px solid transparent; transition:border-color .12s, box-shadow .12s; }
+.m.talk img { border-color:#3ddc84; box-shadow:0 0 8px 2px rgba(61,220,132,.8); }
+.m .n { max-width:140px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.m .s { font-size:12px; opacity:.9; }
+.m:not(.talk) { opacity:.78; }
+body.mini #list .m:not(.talk) { display:none; }
+body.mini #bar #title { display:none; }
+body.hidelist #list { display:none; }
+#hint { display:none; margin:8px 0 0; padding:6px 8px; background:rgba(0,0,0,.6); border-radius:8px; font-size:12px; }
+body.nokey #hint { display:block; }
+</style>
 </head>
 <body>
-    <div class="container">
-        <h1>VoiceRoom</h1>
-        <p>Connected successfully!</p>
-        <!-- Add your voice chat client components or script references here -->
-    </div>
-    <script src="/app.js"></script>
-</body>
-</html>
+<div id="bar">
+  <span id="title">VoiceRoom</span>
+  <span id="status" class="dot off"></span>
+  <button id="btnList" title="Show or hide everyone">&#9776;</button>
+  <button id="btnMini" title="Compact mode">&#9645;</button>
+  <button id="btnOpacity" title="Change see-through level">&#9680;</button>
+</div>
+<div id="list"></div>
+<p id="hint">Add <b>?key=YOURPASSWORD</b> to the link, or open the link you were given.</p>
+<script>
+(function () {
+  var $ = function (id) { return document.getElementById(id); };
+  var q = new URLSearchParams(location.search);
+  var key = q.get('key') || localStorage.getItem('vr_key') || '';
+  if (key) localStorage.setItem('vr_key', key);
+  var alphas = [0.15, 0.35, 0.55, 0.8], ai = parseInt(localStorage.getItem('vr_ai') || '1', 10);
+  function applyAlpha() { document.body.style.setProperty('--alpha', alphas[ai]); localStorage.setItem('vr_ai', ai); }
+  applyAlpha();
+  if (localStorage.getItem('vr_mini') === '1') document.body.classList.add('mini');
+  if (localStorage.getItem('vr_hide') === '1') document.body.classList.add('hidelist');
+  $('btnOpacity').onclick = function () { ai = (ai + 1) % alphas.length; applyAlpha(); };
+  $('btnMini').onclick = function () { var on = document.body.classList.toggle('mini'); localStorage.setItem('vr_mini', on ? '1' : '0'); };
+  $('btnList').onclick = function () { var on = document.body.classList.toggle('hidelist'); localStorage.setItem('vr_hide', on ? '1' : '0'); };
+  var rows = {};
+  function render(d) {
+    $('title').textContent = d.channel;
+    var list = $('list'), seen = {};
+    d.members.forEach(function (m) {
+      seen[m.id] = 1;
+      var r = rows[m.id];
+      if (!r) {
+        r = rows[m.id] = document.createElement('div');
+        r.innerHTML = '<img alt=""><span class="n"></span><span class="s"></span>';
+        list.appendChild(r);
+      }
+      r.className = 'm' + (m.talking ? ' talk' : '');
+      r.querySelector('img').src = m.avatar;
+      r.querySelector('.n').textContent = m.name;
+      r.querySelector('.s').textContent = m.deafened ? '\uD83D\uDD07' : (m.muted ? '\uD83C\uDF99\uFE0F\u2716' : '');
+    });
+    Object.keys(rows).forEach(function (id) { if (!seen[id]) { rows[id].remove(); delete rows[id]; } });
+  }
+  function connect() {
+    var es = new EventSource('events?key=' + encodeURIComponent(key));
+    es.onopen = function () { $('status').className = 'dot on'; document.body.classList.remove('nokey'); };
+    es.onmessage = function (e) { render(JSON.parse(e.data)); };
+    es.onerror = function () { $('status').className = 'dot off'; if (!key) document.body.classList.add('nokey'); es.close(); setTimeout(connect, 2000); };
+  }
+  connect();
+})();
+</script>
+</body></html>
